@@ -69,6 +69,9 @@ export const auth = betterAuth({
             }
         }),
         admin({
+            // defaultRole: "user",
+            // adminRoles: ["admin", "super-admin"], // we don't need when we use custom access control
+            // adminUserIds: [process.env.ADMIN_USER_ID || ""],
             ac,
             roles: {
                 admin: adminRole as any,
@@ -98,7 +101,8 @@ export const auth = betterAuth({
             permissions: {
                 type: "string",
                 required: false,
-            }
+            },
+            
         }
     },
     databaseHooks: {
