@@ -1,0 +1,1 @@
+ALTER TABLE "roles" ADD COLUMN "order" integer DEFAULT 0;

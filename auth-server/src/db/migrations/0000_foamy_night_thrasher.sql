@@ -20,11 +20,11 @@ CREATE TABLE "api_key" (
 	"start" text,
 	"prefix" text,
 	"key" text NOT NULL,
-	"user_id" text NOT NULL,
+	"user_id" text,
 	"refill_interval" integer,
 	"refill_amount" integer,
 	"last_refill_at" timestamp,
-	"enabled" boolean DEFAULT true,
+	"enabled" boolean,
 	"rate_limit_enabled" boolean,
 	"rate_limit_time_window" integer,
 	"rate_limit_max" integer,
@@ -34,6 +34,7 @@ CREATE TABLE "api_key" (
 	"expires_at" timestamp,
 	"created_at" timestamp NOT NULL,
 	"updated_at" timestamp NOT NULL,
+	"permissions" text,
 	"metadata" text
 );
 --> statement-breakpoint
@@ -48,70 +49,54 @@ CREATE TABLE "jwks" (
 CREATE TABLE "oauth_access_token" (
 	"id" text PRIMARY KEY NOT NULL,
 	"token" text,
-	"client_id" text NOT NULL,
+	"client_id" text,
 	"session_id" text,
 	"user_id" text,
-	"reference_id" text,
-	"refresh_id" text,
+	"scopes" text,
 	"expires_at" timestamp,
-	"created_at" timestamp,
-	"scopes" text[] NOT NULL,
+	"created_at" timestamp NOT NULL,
 	CONSTRAINT "oauth_access_token_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
 CREATE TABLE "oauth_client" (
 	"id" text PRIMARY KEY NOT NULL,
-	"client_id" text NOT NULL,
+	"client_id" text,
 	"client_secret" text,
-	"disabled" boolean DEFAULT false,
-	"skip_consent" boolean,
-	"enable_end_session" boolean,
-	"scopes" text[],
-	"user_id" text,
-	"created_at" timestamp,
-	"updated_at" timestamp,
+	"redirect_uris" text,
+	"scopes" text,
 	"name" text,
-	"uri" text,
 	"icon" text,
-	"contacts" text[],
-	"tos" text,
-	"policy" text,
-	"software_id" text,
-	"software_version" text,
-	"software_statement" text,
-	"redirect_uris" text[] NOT NULL,
-	"post_logout_redirect_uris" text[],
+	"metadata" text,
 	"token_endpoint_auth_method" text,
-	"grant_types" text[],
-	"response_types" text[],
+	"grant_types" text,
+	"response_types" text,
 	"public" boolean,
-	"type" text,
-	"reference_id" text,
-	"metadata" jsonb,
+	"disabled" boolean DEFAULT false,
+	"user_id" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "oauth_client_client_id_unique" UNIQUE("client_id")
 );
 --> statement-breakpoint
 CREATE TABLE "oauth_consent" (
 	"id" text PRIMARY KEY NOT NULL,
-	"client_id" text NOT NULL,
+	"client_id" text,
 	"user_id" text,
-	"reference_id" text,
-	"scopes" text[] NOT NULL,
-	"created_at" timestamp,
-	"updated_at" timestamp
+	"scopes" text,
+	"created_at" timestamp NOT NULL,
+	"updated_at" timestamp NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "oauth_refresh_token" (
 	"id" text PRIMARY KEY NOT NULL,
-	"token" text NOT NULL,
-	"client_id" text NOT NULL,
+	"token" text,
+	"client_id" text,
 	"session_id" text,
-	"user_id" text NOT NULL,
-	"reference_id" text,
+	"user_id" text,
+	"scopes" text,
 	"expires_at" timestamp,
-	"created_at" timestamp,
-	"revoked" timestamp,
-	"scopes" text[] NOT NULL
+	"created_at" timestamp NOT NULL,
+	CONSTRAINT "oauth_refresh_token_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
 CREATE TABLE "session" (
@@ -140,6 +125,7 @@ CREATE TABLE "user" (
 	"ban_reason" text,
 	"ban_expires" timestamp,
 	"properties" jsonb,
+	"permissions" text,
 	CONSTRAINT "user_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -152,19 +138,71 @@ CREATE TABLE "verification" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "permissions" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" varchar(100) NOT NULL,
+	"value" varchar(100) NOT NULL,
+	"description" text,
+	"is_exclusive" boolean DEFAULT false,
+	"created_at" timestamp DEFAULT now(),
+	CONSTRAINT "permissions_value_unique" UNIQUE("value")
+);
+--> statement-breakpoint
+CREATE TABLE "role_permissions" (
+	"role_id" uuid,
+	"permission_id" uuid,
+	CONSTRAINT "role_permissions_role_id_permission_id_pk" PRIMARY KEY("role_id","permission_id")
+);
+--> statement-breakpoint
+CREATE TABLE "roles" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" varchar(100) NOT NULL,
+	"value" varchar(100) NOT NULL,
+	"description" text,
+	"is_active" boolean DEFAULT true,
+	"parent_id" uuid,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now(),
+	CONSTRAINT "roles_value_unique" UNIQUE("value")
+);
+--> statement-breakpoint
+CREATE TABLE "user_permissions" (
+	"user_id" text,
+	"permission_id" uuid,
+	CONSTRAINT "user_permissions_user_id_permission_id_pk" PRIMARY KEY("user_id","permission_id")
+);
+--> statement-breakpoint
+CREATE TABLE "user_roles" (
+	"user_id" text,
+	"role_id" uuid,
+	CONSTRAINT "user_roles_user_id_role_id_pk" PRIMARY KEY("user_id","role_id")
+);
+--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "api_key" ADD CONSTRAINT "api_key_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_refresh_id_oauth_refresh_token_id_fk" FOREIGN KEY ("refresh_id") REFERENCES "public"."oauth_refresh_token"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_client" ADD CONSTRAINT "oauth_client_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_consent" ADD CONSTRAINT "oauth_consent_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_consent" ADD CONSTRAINT "oauth_consent_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "role_permissions" ADD CONSTRAINT "role_permissions_permission_id_permissions_id_fk" FOREIGN KEY ("permission_id") REFERENCES "public"."permissions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "roles" ADD CONSTRAINT "roles_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "public"."roles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_permissions" ADD CONSTRAINT "user_permissions_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_permissions" ADD CONSTRAINT "user_permissions_permission_id_permissions_id_fk" FOREIGN KEY ("permission_id") REFERENCES "public"."permissions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_role_id_roles_id_fk" FOREIGN KEY ("role_id") REFERENCES "public"."roles"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");
+CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");--> statement-breakpoint
+CREATE INDEX "idx_permissions_value_exclusive" ON "permissions" USING btree ("value","is_exclusive");--> statement-breakpoint
+CREATE INDEX "idx_role_permissions_role_id" ON "role_permissions" USING btree ("role_id");--> statement-breakpoint
+CREATE INDEX "idx_role_permissions_permission_id" ON "role_permissions" USING btree ("permission_id");--> statement-breakpoint
+CREATE INDEX "idx_roles_value_active" ON "roles" USING btree ("value","is_active");--> statement-breakpoint
+CREATE INDEX "idx_user_permissions_user_id" ON "user_permissions" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_user_roles_user_id" ON "user_roles" USING btree ("user_id");

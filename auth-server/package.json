@@ -11,6 +11,7 @@
     "dev:watch": "nodemon --exec tsx src/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx src/db/seed.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "open:docs": "open-cli http://localhost:4000/api/auth/reference",
