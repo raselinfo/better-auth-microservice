@@ -1,6 +1,22 @@
 version: '3.8'
 
 services:
+  # auth-server:
+  #   build: .
+  #   container_name: hono-auth-server
+  #   restart: unless-stopped
+  #   ports:
+  #     - "4000:4000"
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - hono-auth-network
+
   postgres:
     image: postgres:16-alpine
     container_name: hono-auth-postgres
@@ -50,10 +66,43 @@ services:
     # profiles:
     #   - admin
 
+  redis:
+    image: redis:alpine
+    container_name: hono-auth-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hono-auth-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+# Redis Commander - Optional web interface for Redis management
+  # Access at http://localhost:8081
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: hono-auth-redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - hono-auth-network
+
 volumes:
   postgres_data:
     driver: local
   pgadmin_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:

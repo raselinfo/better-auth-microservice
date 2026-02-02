@@ -2,7 +2,41 @@ import { drizzleClient as db } from "./client";
 import * as schema from "./schemas/rbac";
 import { user } from "./schemas/auth";
 import { eq } from "drizzle-orm";
-import { statement } from "../permissions";
+
+
+const defaultPermissions=[
+    // users
+    "user:create",
+    "user:read",
+    "user:update",
+    "user:delete",
+    "user:list",
+    "user:set-role",
+    "user:set-permission",
+    "user:ban",
+    "user:impersonate",
+    "user:set-password",
+    "system:manage_settings",
+    // roles
+    "role:create",
+    "role:read",
+    "role:update",
+    "role:delete",
+    "role:list",
+    // permissions
+    "permission:create",
+    "permission:read",
+    "permission:update",
+    "permission:delete",
+    "permission:list",
+    
+]
+
+const defaultRoles=[
+    "super_admin",
+    "admin",
+    "user"
+]
 
 async function seed() {
     console.log("🌱 Starting RBAC seeding...");
@@ -11,18 +45,17 @@ async function seed() {
     console.log("Creating permissions...");
     const allPermissions: { name: string; value: string; description: string }[] = [];
 
-    // Extract permissions from the 'statement' object in permissions.ts
-    // Format: resource:action (e.g., "user:create")
-    for (const [resource, actions] of Object.entries(statement)) {
-        if (Array.isArray(actions)) {
-            for (const action of actions) {
-                allPermissions.push({
-                    name: `${resource.charAt(0).toUpperCase() + resource.slice(1)} ${action.charAt(0).toUpperCase() + action.slice(1)}`,
-                    value: `${resource}:${action}`,
-                    description: `Allow ${action} on ${resource}`
-                });
-            }
-        }
+    // Use defaultPermissions array
+    for (const permValue of defaultPermissions) {
+        // Simple name generation: "user:create" -> "User Create"
+        const [resource, action] = permValue.split(':');
+        const name = `${resource.charAt(0).toUpperCase() + resource.slice(1)} ${action.charAt(0).toUpperCase() + action.slice(1)}`;
+        
+        allPermissions.push({
+            name: name,
+            value: permValue,
+            description: `Allow ${action} on ${resource}`
+        });
     }
 
     // Insert permissions if they don't exist
@@ -35,22 +68,14 @@ async function seed() {
 
     // 2. Seed Roles
     console.log("Creating roles...");
-    const rolesToCreate = [
-        {
-            name: "Admin",
-            value: "admin",
-            description: "Administrator with full access",
-            isActive: true,
-            order: 1
-        },
-        {
-            name: "User",
-            value: "user",
-            description: "Standard user",
-            isActive: true,
-            order: 10
-        }
-    ];
+    // Map defaultRoles array to role objects
+    const rolesToCreate = defaultRoles.map((roleValue, index) => ({
+        name: roleValue.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+        value: roleValue,
+        description: `${roleValue.charAt(0).toUpperCase() + roleValue.slice(1)} role`,
+        isActive: true,
+        order: index + 1
+    }));
 
     for (const role of rolesToCreate) {
         await db.insert(schema.roles)

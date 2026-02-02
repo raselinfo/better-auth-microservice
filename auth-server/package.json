@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsup src/index.ts --format esm --clean",
     "start": "node dist/index.js",
     "dev:watch": "nodemon --exec tsx src/index.ts",
     "db:generate": "drizzle-kit generate",
@@ -31,7 +31,9 @@
     "better-auth": "^1.4.7",
     "dotenv": "^17.0.1",
     "drizzle-orm": "^0.44.2",
+    "drizzle-zod": "^0.8.3",
     "hono": "^4.10.8",
+    "ioredis": "^5.9.2",
     "jose": "^6.1.3",
     "pg": "^8.16.3",
     "react": "^19.2.3",
@@ -48,6 +50,7 @@
     "globals": "^17.1.0",
     "nodemon": "^3.1.11",
     "open-cli": "^8.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.20.3",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.53.1"

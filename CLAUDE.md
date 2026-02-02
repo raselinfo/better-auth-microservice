@@ -1,63 +1,80 @@
-Act you are expert in javascript, typescript, hono, better-auth. 
+<!-- Plan for the Dynamic Auth Instance -->
 
-I am going to create a auth microservice. where i can use this microservice to authenticated my other microservices.
+# Dynamic Auth Service Plan (Multi-Tenancy/Multi-Environment)
 
-The auth service should have the following features:
-- User Signin with magic link
-- User Signin with provider (Google and Facebook)
-- I can add custom properties to the user table and those properties are also included in the user session.
-- After new user signin i will call a webhook with necessary user payload to notify the other microservices (API)
-- I can manage my auth service users roles and permissions. the auth service should allow me to manage user role and permissions. I can add or remove roles to a user as well as assign or revoke permissions to those users. 
-- I have other microservice backend so i need a client credential flow solution to authenticated those microservices so that when i need to perform any action from the other microservice (backend) to the auth service (API) i need to use a client credential flow token. Or you can suggest any other solution for that.
-- I also plan to create a admin dashboard from where i can manage my user role, permissions, client client credential flow for other service authentication. it will be build using nextjs 15. but my auth service will not bounded with nextjs 15
+## Objective
+Enable the creation and management of multiple isolated Auth Services (instances) dynamically from the Admin Dashboard. Users can define environments (e.g., Development, Staging, Production), each with its own database connection, authentication providers, and configuration settings.
 
+## 1. Architecture Overview
+- **Meta-Layer**: A central management layer responsible for storing configuration and instantiating Auth Services.
+- **Dynamic Registry**: A Singleton `AuthRegistry` that manages the lifecycle of multiple `better-auth` instances in memory.
+- **Request Routing**: Middleware to identify the target environment (via Header, Subdomain, or API Key) and route the request to the correct instance.
 
-Technology Stack:
-- For Auth microservice i am going to use typescript, hono, better-auth, drizzle-orm, postgresql, zod, resend.
-- For admin application i am going to use nextjs 15, vite, tailwindcss, shadcn-ui, typescript.
+## 2. Data Modeling (Meta-Database)
+We need a storage mechanism for the configuration of each auth instance.
 
-For above technology stack i am going to use latest version of each technology.
+### `auth_instances` Table
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | UUID | Unique identifier for the environment/instance. |
+| `name` | String | Friendly name (e.g., "Prod App A"). |
+| `slug` | String | Unique slug for routing (e.g., `app-a-prod`). |
+| `db_config` | JSON (Encrypted) | DB connection string or credentials. |
+| `auth_config` | JSON | Better-Auth config (providers, secrets, options). |
+| `is_active` | Boolean | Enable/Disable the instance. |
+| `created_at` | Timestamp | |
+| `updated_at` | Timestamp | |
 
-My Database URL: postgres://postgres:postgres@localhost:5432/auth_db
+## 3. Core Components
 
-# Current apps
-    - ./auth-server (Port 4000)
-        - Uses Better Auth with Hono
-        - Implements M2M via Client Credentials (oauth-provider)
-        - Custom middleware for M2M token validation
-    - ./admin (Port 3001)
-        - Next.js 15 Admin Dashboard
-        - Manages Users, Roles, Permissions, and OAuth Clients
-    - ./web (Port 3000)
-        - Client application
-    - ./express-backend (Port 5001)
-        - Example microservice consuming Auth Service via M2M flow
+### A. Configuration Manager
+- Responsible for CRUD operations on the `auth_instances` table.
+- Validates configuration schemas (Zod) before saving.
+- Encrypts sensitive data (client secrets, DB passwords) at rest.
 
-# Implementation Details
+### B. Auth Instance Registry (`AuthManager`)
+A Singleton class acting as a factory and cache.
+- **Map**: `Map<string, BetterAuthInstance>` (Key: Instance ID or Slug).
+- **Methods**:
+    - `getInstance(id)`: Returns existing instance or creates a new one.
+    - `reloadInstance(id)`: Forces re-initialization (after config update).
+    - `removeInstance(id)`: Cleans up resources.
+- **Lazy Loading**: Instances are only created when first requested.
 
-## Machine-to-Machine (M2M) Authentication
-- **Flow**: Client Credentials Grant (RFC 6749)
-- **Client Storage**: `oauthClient` table (Secrets hashed via SHA-256 -> Base64Url)
-- **Token Storage**: `oauthAccessToken` table (Tokens hashed via SHA-256 -> Base64Url)
-- **Auth Method**: `client_secret_basic` (Authorization: Basic base64(client_id:client_secret))
-- **Middleware**: `m2mMiddleware` in `auth-server/src/index.ts` validates tokens against DB (hashing input token before lookup).
+### C. Dynamic Database Adapter
+- Instead of a static `drizzleAdapter`, we need a factory function.
+- `createAdapter(config)`: Connects to the specific DB defined in the instance config.
+- **Connection Pooling**: Needs careful management to avoid exhausting connections if many instances exist. Consider a shared pool if tenants use the same DB server, or distinct pools for distinct servers.
 
-## User Management
-- **Permissions**: Managed via `permissions` column in `user` table.
-- **Roles**: `admin`, `user` (default).
-- **Custom Properties**: Stored in `properties` JSONB column.
+### D. Routing Middleware
+- **Identification**: Inspect `X-Auth-Instance-Id` header or subdomain.
+- **Resolution**:
+    1. Extract ID.
+    2. Call `AuthManager.getInstance(id)`.
+    3. Mount the specific auth instance handler for the request.
+- **Error Handling**: Return 404 if instance doesn't exist or 503 if initialization fails.
 
-## Commands
-- **Auth Server**: `cd auth-server && npm run dev`
-- **Admin**: `cd admin && npm run dev`
-- **Express Backend**: `cd express-backend && npm run dev`
+## 4. Implementation Phases
 
-for package manager i am going to use pnpm
+### Phase 1: Meta-Schema & CRUD
+1. Create `auth_instances` schema in the main (admin) database.
+2. Build Admin Dashboard UI to Create/Edit/Delete instances.
+3. Implement backend endpoints for these operations.
 
-i have already run the all application.
-1. admin on port 3001
-2. auth server on port 4000
-3. web on port 3000
-4. express backend on port 5001
+### Phase 2: The `AuthManager`
+1. Implement the Registry class.
+2. Create the "Hydrator" logic: Fetch config from DB -> Construct `BetterAuthOptions` -> `betterAuth()`.
+3. Handle basic caching.
 
-Don't need to run the apps again. Don't run pnpm dev again.
+### Phase 3: Dynamic Routing
+1. Create a wildcard route handler (e.g., `/api/v1/:instance/*`).
+2. Implement the middleware to resolve instance and forward request.
+
+### Phase 4: Database Isolation
+1. Implement dynamic Drizzle client creation.
+2. Ensure migrations can be run for specific instances from the dashboard.
+
+## 5. Security & Performance
+- **Secrets Management**: Use AES-256 encryption for storing `client_secret` and DB credentials in the Meta-DB.
+- **Isolation**: Ensure one instance cannot access another's data (separate DBs or Schemas).
+- **Memory Management**: Implement an LRU (Least Recently Used) eviction policy in `AuthManager` to unload unused instances from memory.
